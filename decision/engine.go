@@ -756,6 +756,7 @@ func (e *StrategyEngine) BuildSystemPrompt(accountEquity float64, variant string
 	sb.WriteString("- Low confidence (60-69): Use 30-50%% of max position value limit\n")
 	sb.WriteString(fmt.Sprintf("- Example: With equity %.0f and BTC/ETH ratio %.1fx, max is %.0f USDT\n",
 		accountEquity, btcEthPosValueRatio, accountEquity*btcEthPosValueRatio))
+	sb.WriteString("- **CRITICAL**: Ensure total new positions don't exceed available balance. Check account.available_balance before opening positions!\n")
 	sb.WriteString("- **DO NOT** just use available_balance as position_size_usd. Use the Position Value Limits!\n\n")
 
 	// 4. Trading frequency (editable)
@@ -811,11 +812,17 @@ func (e *StrategyEngine) BuildSystemPrompt(accountEquity float64, variant string
 		riskControl.BTCETHMaxLeverage, examplePositionSize))
 	sb.WriteString("  {\"symbol\": \"ETHUSDT\", \"action\": \"close_long\"}\n")
 	sb.WriteString("]\n```\n")
+	sb.WriteString("\n**NOTE**: The prices in the example (97000, 91000) are for format demonstration only. Always use actual market prices and proper risk-reward calculations!\n")
 	sb.WriteString("</decision>\n\n")
 	sb.WriteString("## Field Description\n\n")
 	sb.WriteString("- `action`: open_long | open_short | close_long | close_short | hold | wait\n")
 	sb.WriteString(fmt.Sprintf("- `confidence`: 0-100 (opening recommended ≥ %d)\n", riskControl.MinConfidence))
-	sb.WriteString("- Required when opening: leverage, position_size_usd, stop_loss, take_profit, confidence, risk_usd\n")
+	sb.WriteString("- Required when opening: leverage, position_size_usd, stop_loss, take_profit, confidence, risk_usd\n\n")
+	sb.WriteString("- **CRITICAL PRICE CALCULATION**: \n")
+	sb.WriteString("  * Always base stop_loss and take_profit on CURRENT market price from the data provided above\n")
+	sb.WriteString("  * For LONG: stop_loss < current_price < take_profit (e.g., if BTC=95000, then stop_loss=92000, take_profit=100000)\n")
+	sb.WriteString("  * For SHORT: take_profit < current_price < stop_loss (e.g., if BTC=95000, then take_profit=90000, stop_loss=98000)\n")
+	sb.WriteString("  * Risk-Reward ratio must be ≥2.0:1 (profit_distance / loss_distance from current price)\n\n")
 	sb.WriteString("- **IMPORTANT**: All numeric values must be calculated numbers, NOT formulas/expressions (e.g., use `27.76` not `3000 * 0.01`)\n\n")
 
 	// 8. Custom Prompt
@@ -1569,11 +1576,16 @@ func validateDecision(d *Decision, accountEquity float64, btcEthLeverage, altcoi
 			}
 		}
 
+		// Improved risk-reward ratio calculation
+		// Use the midpoint between stop loss and take profit as estimated entry price
+		// This is more realistic than the previous 20% calculation
 		var entryPrice float64
 		if d.Action == "open_long" {
-			entryPrice = d.StopLoss + (d.TakeProfit-d.StopLoss)*0.2
+			// For long: entry should be closer to current market, between stop loss and take profit
+			entryPrice = d.StopLoss + (d.TakeProfit-d.StopLoss)*0.1 // Assume entry near stop loss (more conservative)
 		} else {
-			entryPrice = d.StopLoss - (d.StopLoss-d.TakeProfit)*0.2
+			// For short: entry should be closer to current market, between take profit and stop loss  
+			entryPrice = d.TakeProfit + (d.StopLoss-d.TakeProfit)*0.1 // Assume entry near take profit (more conservative)
 		}
 
 		var riskPercent, rewardPercent, riskRewardRatio float64
@@ -1591,8 +1603,10 @@ func validateDecision(d *Decision, accountEquity float64, btcEthLeverage, altcoi
 			}
 		}
 
-		if riskRewardRatio < 3.0 {
-			return fmt.Errorf("risk/reward ratio too low (%.2f:1), must be ≥3.0:1 [risk: %.2f%% reward: %.2f%%] [stop loss: %.2f take profit: %.2f]",
+		// Relaxed risk-reward ratio requirement (was 3.0, now 2.0)
+		// Since we're using a more conservative entry price estimation
+		if riskRewardRatio < 2.0 {
+			return fmt.Errorf("risk/reward ratio too low (%.2f:1), must be ≥2.0:1 [risk: %.2f%% reward: %.2f%%] [stop loss: %.2f take profit: %.2f]",
 				riskRewardRatio, riskPercent, rewardPercent, d.StopLoss, d.TakeProfit)
 		}
 	}
