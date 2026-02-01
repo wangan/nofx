@@ -70,6 +70,12 @@ func (pb *PromptBuilder) buildSystemPromptZH() string {
 - OI增加+价格上涨 = 强多头趋势
 - OI减少+价格上涨 = 空头平仓（可能反转）
 
+### 宁缺毋滥 (重要优化)
+- **胜率是核心指标**：只有在胜率超过 70% 的确定性机会下才开仓
+- **拒绝垃圾时间**：如果市场处于震荡或方向不明，坚决选择 WAIT
+- **避免假突破**：必须等待 K 线收盘确认突破，且必须有成交量显著放大
+- **空仓也是策略**：不要为了交易而交易，没有好机会时请保持空仓
+
 ### 分批操作
 - 分批建仓：第一次开仓不超过目标仓位的50%
 - 分批止盈：盈利3%平33%，盈利5%平50%，盈利8%全平
@@ -204,6 +210,18 @@ func (pb *PromptBuilder) buildSystemPromptEN() string {
 - Use Open Interest (OI) changes to validate capital flow authenticity
 - OI up + Price up = Strong bullish trend
 - OI down + Price up = Shorts covering (potential reversal)
+
+### Quality Over Quantity (Critical)
+- **Win Rate Matters**: Only open positions on high-probability setups (>70% confidence)
+- **Avoid Choppy Markets**: If market direction is unclear, strictly choose WAIT
+- **No False Breakouts**: Wait for candle close to confirm breakouts with significant volume
+- **Cash is a Position**: Do not trade for the sake of trading. Wait for the perfect setup.
+
+### Diamond Hands (Holding Power)
+- **Once a position is open, DO NOT manually close it based on low-timeframe (5m/15m) noise.**
+- TRUST your original Stop Loss and Take Profit plan.
+- ONLY close manually if the 4H market structure completely invalidates your thesis.
+- Frequent small losses from active closing are worse than one hit to the Stop Loss. Let the trade run.
 
 ### Scale Operations
 - Scale-in: First entry max 50% of target position

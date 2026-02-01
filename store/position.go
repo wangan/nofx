@@ -405,16 +405,20 @@ func (s *PositionStore) GetFullStats(traderID string) (*TraderStats, error) {
 
 	for _, pos := range positions {
 		stats.TotalTrades++
-		stats.TotalPnL += pos.RealizedPnL
+		
+		// Use Net PnL (Realized PnL - Fee) for all stats
+		netPnL := pos.RealizedPnL - pos.Fee
+		
+		stats.TotalPnL += netPnL
 		stats.TotalFee += pos.Fee
-		pnls = append(pnls, pos.RealizedPnL)
+		pnls = append(pnls, netPnL)
 
-		if pos.RealizedPnL > 0 {
+		if netPnL > 0 {
 			stats.WinTrades++
-			totalWin += pos.RealizedPnL
-		} else if pos.RealizedPnL < 0 {
+			totalWin += netPnL
+		} else if netPnL < 0 {
 			stats.LossTrades++
-			totalLoss += -pos.RealizedPnL
+			totalLoss += -netPnL
 		}
 	}
 
@@ -481,11 +485,14 @@ func (s *PositionStore) GetRecentTrades(traderID string, limit int) ([]RecentTra
 			t.HoldDuration = formatDurationMs(durationMs)
 		}
 
+		// Calculate PnL Percentage based on Net PnL (including fees)
 		if pos.EntryPrice > 0 {
-			if t.Side == "long" {
-				t.PnLPct = (pos.ExitPrice - pos.EntryPrice) / pos.EntryPrice * 100 * float64(pos.Leverage)
-			} else {
-				t.PnLPct = (pos.EntryPrice - pos.ExitPrice) / pos.EntryPrice * 100 * float64(pos.Leverage)
+			netPnL := pos.RealizedPnL - pos.Fee
+			// PnL% = (Net PnL / Initial Margin) * 100
+			// Initial Margin = (Entry Price * Quantity) / Leverage
+			initialMargin := (pos.EntryPrice * pos.Quantity) / float64(pos.Leverage)
+			if initialMargin > 0 {
+				t.PnLPct = (netPnL / initialMargin) * 100
 			}
 		}
 
@@ -609,8 +616,8 @@ func (s *PositionStore) GetSymbolStats(traderID string, limit int) ([]SymbolStat
 		}
 		s := symbolMap[pos.Symbol]
 		s.TotalTrades++
-		s.TotalPnL += pos.RealizedPnL
-		if pos.RealizedPnL > 0 {
+		s.TotalPnL += (pos.RealizedPnL - pos.Fee) // Use Net PnL
+		if (pos.RealizedPnL - pos.Fee) > 0 {
 			s.WinTrades++
 		}
 
@@ -699,8 +706,9 @@ func (s *PositionStore) GetHoldingTimeStats(traderID string) ([]HoldingTimeStats
 
 		r := rangeStats[rangeKey]
 		r.count++
-		r.totalPnL += pos.RealizedPnL
-		if pos.RealizedPnL > 0 {
+		netPnL := pos.RealizedPnL - pos.Fee
+		r.totalPnL += netPnL
+		if netPnL > 0 {
 			r.wins++
 		}
 	}
@@ -745,8 +753,9 @@ func (s *PositionStore) GetDirectionStats(traderID string) ([]DirectionStats, er
 		}
 		s := sideStats[pos.Side]
 		s.TradeCount++
-		s.TotalPnL += pos.RealizedPnL
-		if pos.RealizedPnL > 0 {
+		netPnL := pos.RealizedPnL - pos.Fee
+		s.TotalPnL += netPnL
+		if netPnL > 0 {
 			s.WinRate++
 		}
 	}
@@ -856,8 +865,9 @@ func (s *PositionStore) GetHistorySummary(traderID string) (*HistorySummary, err
 	s.db.Where("trader_id = ? AND status = ?", traderID, "CLOSED").
 		Order("exit_time DESC").Limit(20).Find(&recent)
 	for _, pos := range recent {
-		summary.RecentPnL += pos.RealizedPnL
-		if pos.RealizedPnL > 0 {
+		netPnL := pos.RealizedPnL - pos.Fee
+		summary.RecentPnL += netPnL
+		if netPnL > 0 {
 			summary.RecentWinRate++
 		}
 	}
@@ -886,7 +896,7 @@ func (s *PositionStore) calculateStreaks(traderID string, summary *HistorySummar
 	isFirst := true
 
 	for _, pos := range positions {
-		isWin := pos.RealizedPnL > 0
+		isWin := (pos.RealizedPnL - pos.Fee) > 0 // Use Net PnL
 
 		if isFirst {
 			if isWin {

@@ -3,7 +3,9 @@
 
 services:
   nofx:
-    image: ghcr.io/nofxaios/nofx/nofx-backend:stable
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
     container_name: nofx-trading
     restart: unless-stopped
     stop_grace_period: 30s

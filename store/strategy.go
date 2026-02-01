@@ -91,6 +91,8 @@ type PromptSectionsConfig struct {
 	TradingFrequency string `json:"trading_frequency,omitempty"`
 	// entry standards
 	EntryStandards string `json:"entry_standards,omitempty"`
+	// position management (new)
+	PositionManagement string `json:"position_management,omitempty"`
 	// decision process
 	DecisionProcess string `json:"decision_process,omitempty"`
 }

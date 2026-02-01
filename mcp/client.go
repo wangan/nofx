@@ -269,9 +269,16 @@ func (client *Client) parseMCPResponse(body []byte) (string, error) {
 
 func (client *Client) buildUrl() string {
 	if client.UseFullURL {
+		// If using full URL, check if it's already a complete path
+		// If the user provided URL ends with /v1, we might need to append /chat/completions depending on provider
+		// But if UseFullURL is true (usually from # suffix in SetAPIKey), we respect it as is
 		return client.BaseURL
 	}
-	return fmt.Sprintf("%s/chat/completions", client.BaseURL)
+	
+	// Handle trailing slash
+	baseURL := strings.TrimSuffix(client.BaseURL, "/")
+	
+	return fmt.Sprintf("%s/chat/completions", baseURL)
 }
 
 func (client *Client) buildRequest(url string, jsonData []byte) (*http.Request, error) {

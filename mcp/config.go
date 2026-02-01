@@ -1,9 +1,11 @@
 package mcp
 
 import (
+	"crypto/tls"
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"nofx/logger"
@@ -37,6 +39,17 @@ type Config struct {
 
 // DefaultConfig returns default configuration
 func DefaultConfig() *Config {
+	// Initialize HTTP client
+	httpClient := &http.Client{Timeout: DefaultTimeout}
+
+	// Check if TLS verification should be skipped
+	skipTLS := strings.ToLower(os.Getenv("AI_SKIP_TLS_VERIFY")) == "true" || os.Getenv("AI_SKIP_TLS_VERIFY") == "1"
+	if skipTLS {
+		httpClient.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+
 	return &Config{
 		// Default values
 		MaxTokens:      getEnvInt("AI_MAX_TOKENS", 2000),
@@ -48,7 +61,7 @@ func DefaultConfig() *Config {
 
 		// Default dependencies (use global logger)
 		Logger:     logger.NewMCPLogger(),
-		HTTPClient: &http.Client{Timeout: DefaultTimeout},
+		HTTPClient: httpClient,
 	}
 }
 

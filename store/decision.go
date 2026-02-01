@@ -311,3 +311,19 @@ func (s *DecisionStore) GetLastCycleNumber(traderID string) (int, error) {
 	}
 	return *cycleNumber, nil
 }
+
+// GetDecisionBeforeTime gets the latest decision record before the specified timestamp
+func (s *DecisionStore) GetDecisionBeforeTime(traderID string, timestamp int64) (*DecisionRecord, error) {
+	t := time.Unix(timestamp/1000, (timestamp%1000)*1000000).UTC()
+	var dbRecord DecisionRecordDB
+	err := s.db.Where("trader_id = ? AND timestamp < ?", traderID, t).
+		Order("timestamp DESC").
+		First(&dbRecord).Error
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to query decision record: %w", err)
+	}
+	return dbRecord.toRecord(), nil
+}

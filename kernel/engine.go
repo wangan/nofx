@@ -51,6 +51,7 @@ type PositionInfo struct {
 	LiquidationPrice float64 `json:"liquidation_price"`
 	MarginUsed       float64 `json:"margin_used"`
 	UpdateTime       int64   `json:"update_time"` // Position update timestamp (milliseconds)
+	EntryReason      string  `json:"entry_reason,omitempty"` // Reason for entering the position
 }
 
 // AccountInfo account information
@@ -1011,7 +1012,13 @@ func (e *StrategyEngine) BuildSystemPrompt(accountEquity float64, variant string
 		sb.WriteString(fmt.Sprintf("\nFeel free to use any effective analysis method, but **confidence ≥ %d** required to open positions; avoid low-quality behaviors such as single indicators, contradictory signals, sideways consolidation, reopening immediately after closing, etc.\n\n", riskControl.MinConfidence))
 	}
 
-	// 6. Decision process (editable)
+	// 6. Position Management (editable)
+	if promptSections.PositionManagement != "" {
+		sb.WriteString(promptSections.PositionManagement)
+		sb.WriteString("\n\n")
+	}
+
+	// 7. Decision process (editable)
 	if promptSections.DecisionProcess != "" {
 		sb.WriteString(promptSections.DecisionProcess)
 		sb.WriteString("\n\n")
@@ -1329,6 +1336,10 @@ func (e *StrategyEngine) formatPositionInfo(index int, pos PositionInfo, ctx *Co
 		index, pos.Symbol, strings.ToUpper(pos.Side),
 		pos.EntryPrice, pos.MarkPrice, pos.Quantity, positionValue, pos.UnrealizedPnLPct, pos.UnrealizedPnL, pos.PeakPnLPct,
 		pos.Leverage, pos.MarginUsed, pos.LiquidationPrice, holdingDuration))
+
+	if pos.EntryReason != "" {
+		sb.WriteString(fmt.Sprintf("### 📝 Context for this Position (Do NOT forget):\n%s\n\n**Instruction**: Evaluate if the *Original Premise* is broken. If the premise is still valid, IGNORE small noise.\n\n", pos.EntryReason))
+	}
 
 	if marketData, ok := ctx.MarketDataMap[pos.Symbol]; ok {
 		sb.WriteString(e.formatMarketData(marketData))

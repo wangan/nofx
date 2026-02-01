@@ -153,9 +153,26 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 
 	switch aiModel {
 	case "claude":
-		mcpClient = mcp.NewClaudeClient()
-		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
-		logger.Infof("🤖 [%s] Using Claude AI", config.Name)
+		// Check if custom API is provided (e.g. OpenAI-compatible endpoint)
+		if config.CustomAPIURL != "" {
+			// If URL contains "v1/chat/completions" or similar OpenAI style, assume OpenAI compatibility
+			// Or just assume any custom URL for "claude" model implies using OpenAI-compatible wrapper (like OneAPI/NewAPI)
+			// unless explicitly stated otherwise.
+			// But to be safe, let's stick to OpenAI client if CustomAPIURL is set, 
+			// because most aggregators provide OpenAI-compatible interface even for Claude models.
+			mcpClient = mcp.NewClient(
+				mcp.WithProvider(mcp.ProviderCustom), // Force custom provider (OpenAI compatible)
+				mcp.WithBaseURL(config.CustomAPIURL),
+				mcp.WithAPIKey(config.CustomAPIKey),
+				mcp.WithModel(config.CustomModelName),
+			)
+			logger.Infof("🤖 [%s] Using Custom AI API for Claude model: %s (OpenAI compatible mode)", config.Name, config.CustomModelName)
+		} else {
+			// Native Anthropic API
+			mcpClient = mcp.NewClaudeClient()
+			mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
+			logger.Infof("🤖 [%s] Using Native Claude AI", config.Name)
+		}
 
 	case "kimi":
 		mcpClient = mcp.NewKimiClient()
@@ -192,13 +209,24 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		logger.Infof("🤖 [%s] Using custom AI API: %s (model: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
 
 	default: // deepseek or empty
-		mcpClient = mcp.NewDeepSeekClient()
-		apiKey := config.DeepSeekKey
-		if apiKey == "" {
-			apiKey = config.CustomAPIKey
+		// If custom URL is provided but model is not explicitly "custom", treat as custom/OpenAI compatible
+		if config.CustomAPIURL != "" {
+			mcpClient = mcp.NewClient(
+				mcp.WithProvider(mcp.ProviderCustom),
+				mcp.WithBaseURL(config.CustomAPIURL),
+				mcp.WithAPIKey(config.CustomAPIKey),
+				mcp.WithModel(config.CustomModelName),
+			)
+			logger.Infof("🤖 [%s] Using Custom AI API (auto-detected): %s (model: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
+		} else {
+			mcpClient = mcp.NewDeepSeekClient()
+			apiKey := config.DeepSeekKey
+			if apiKey == "" {
+				apiKey = config.CustomAPIKey
+			}
+			mcpClient.SetAPIKey(apiKey, config.CustomAPIURL, config.CustomModelName)
+			logger.Infof("🤖 [%s] Using DeepSeek AI", config.Name)
 		}
-		mcpClient.SetAPIKey(apiKey, config.CustomAPIURL, config.CustomModelName)
-		logger.Infof("🤖 [%s] Using DeepSeek AI", config.Name)
 	}
 
 	if config.CustomAPIURL != "" || config.CustomModelName != "" {
@@ -797,6 +825,30 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 		peakPnlPct := at.peakPnLCache[posKey]
 		at.peakPnLCacheMutex.RUnlock()
 
+		// Attempt to fetch entry reasoning from decision history
+		entryReason := ""
+		if at.store != nil && updateTime > 0 {
+			// Find decision just before entry
+			decision, err := at.store.Decision().GetDecisionBeforeTime(at.id, updateTime)
+			if err == nil && decision != nil {
+				// Extract meaningful context from CoT
+				cot := decision.CoTTrace
+				// Simple truncation for now, can be improved with AI summary later
+				if len(cot) > 800 {
+					cot = cot[:800] + "..."
+				}
+				// Also include the specific decision action if available
+				actionDetail := ""
+				for _, d := range decision.Decisions {
+					if d.Symbol == symbol && (d.Action == "open_long" || d.Action == "open_short") {
+						actionDetail = fmt.Sprintf("\n- **Original Plan**: SL: %.2f, TP: %.2f, Reason: %s", d.StopLoss, d.TakeProfit, d.Reasoning)
+						break
+					}
+				}
+				entryReason = fmt.Sprintf("- **Entry Analysis**: %s%s", cot, actionDetail)
+			}
+		}
+
 		positionInfos = append(positionInfos, kernel.PositionInfo{
 			Symbol:           symbol,
 			Side:             side,
@@ -810,6 +862,7 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 			LiquidationPrice: liquidationPrice,
 			MarginUsed:       marginUsed,
 			UpdateTime:       updateTime,
+			EntryReason:      entryReason,
 		})
 	}
 
