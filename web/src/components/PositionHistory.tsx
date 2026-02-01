@@ -327,6 +327,16 @@ function PositionRow({ position }: { position: HistoricalPosition }) {
           : (position.fee || 0).toFixed(2)}
       </td>
 
+      {/* Net P&L (Realized PnL - Fee) */}
+      <td className="py-3 px-4 text-right">
+        <div className="font-mono font-semibold text-sm" style={{
+          color: (realizedPnl - (position.fee || 0)) >= 0 ? '#0ECB81' : '#F6465D'
+        }}>
+          {(realizedPnl - (position.fee || 0)) >= 0 ? '+' : ''}
+          {formatNumber(realizedPnl - (position.fee || 0))}
+        </div>
+      </td>
+
       {/* Duration */}
       <td className="py-3 px-4 text-center text-sm" style={{ color: '#848E9C' }}>
         {formatDuration(holdingMinutes)}
@@ -786,6 +796,12 @@ export function PositionHistory({ traderId }: PositionHistoryProps) {
                   style={{ color: '#848E9C' }}
                 >
                   {t('positionHistory.fee', language)}
+                </th>
+                <th
+                  className="py-3 px-4 text-right text-xs font-semibold uppercase tracking-wider"
+                  style={{ color: '#848E9C' }}
+                >
+                  {t('positionHistory.netPnL', language)}
                 </th>
                 <th
                   className="py-3 px-4 text-center text-xs font-semibold uppercase tracking-wider"

@@ -326,6 +326,27 @@ func GetDefaultStrategyConfig(lang string) StrategyConfig {
 			EntryStandards: `# 🎯 入场标准（严格）
 
 只在多个信号共振时入场。自由使用任何有效的分析方法，避免单一指标、信号矛盾、横盘震荡、或平仓后立即重新开仓等低质量行为。`,
+			PositionManagement: `### 💼 持仓管理原则 (Position Management)
+
+**你不仅要寻找新机会，更要守护现有的阵地。**
+
+当系统中包含 **"📝 Context for this Position"** 信息时，你必须执行以下审计逻辑：
+
+1.  **回顾初衷 (Recall Thesis)**：
+    - 认真阅读 "Entry Analysis"。当初开单是基于什么级别（如 4H Trend）？
+    - **核心原则：Thesis Over Entry (逻辑高于位置)**。即使你发现进场位置稍差（例如追在了局部低点），只要**大周期逻辑（如 4H 强趋势）依然成立**，就不要轻易认输。
+
+2.  **给交易呼吸空间 (Give it Room)**：
+    - **禁止**因为 5m/15m 级别的短期超卖（RSI Oversold）而恐慌平仓。在强趋势中，指标超卖是常态。
+    - **禁止**“反复横跳” (Flip-Flopping)。如果你刚进场不久，除非价格触及**硬性止损位**或**关键结构被彻底破坏**（如 4H Lower High 变为 Higher High），否则**必须持有 (HOLD)**。
+    - 亏损极小（如 -0.5% 以内）不是平仓的理由，这通常只是市场噪音。
+
+3.  **失效离场 (Invalidation)**：
+    - 只有当**原始逻辑彻底失效**（例如：支撑位跌破后的回踩失败、趋势反转确认）时，才考虑提前平仓。
+    - **平仓决策优先级**：` + "`" + `结构破坏 (Structure Broken) > 触及止损 (Hit SL) > 时间止损 > 指标超卖` + "`" + `
+
+**口诀**：
+> "进场若有悔，趋势若未变，且把子弹飞一会儿。" (If entry is regrettable but trend is intact, let the bullet fly.)`,
 			DecisionProcess: `# 📋 决策流程
 
 1. 检查持仓 → 是否止盈/止损
@@ -346,6 +367,27 @@ If you find yourself trading every cycle → standards are too low; if closing p
 			EntryStandards: `# 🎯 Entry Standards (Strict)
 
 Only enter positions when multiple signals resonate. Freely use any effective analysis methods, avoid low-quality behaviors such as single indicators, contradictory signals, sideways oscillation, or immediately restarting after closing positions.`,
+			PositionManagement: `### 💼 Position Management Principles
+
+**You must not only find new opportunities but also guard existing positions.**
+
+When the system includes **"📝 Context for this Position"**, you must perform the following audit:
+
+1.  **Recall Thesis**:
+    - Read "Entry Analysis" carefully. What timeframe was the entry based on (e.g., 4H Trend)?
+    - **Core Principle: Thesis Over Entry**. Even if the entry location is suboptimal (e.g., chasing a local low), as long as the **macro logic (e.g., 4H strong trend) remains valid**, do not give up easily.
+
+2.  **Give it Room**:
+    - **FORBIDDEN**: Panic closing due to 5m/15m short-term oversold (RSI) conditions. In strong trends, oversold is normal.
+    - **FORBIDDEN**: "Flip-Flopping". If you just entered, unless price hits **hard Stop Loss** or **Key Structure is Broken** (e.g., 4H Lower High becomes Higher High), you **MUST HOLD**.
+    - Tiny loss (e.g., < -0.5%) is NOT a reason to close; it is just market noise.
+
+3.  **Invalidation**:
+    - Only consider early exit if the **original logic is completely invalidated** (e.g., support broken then reclaimed failure, trend reversal confirmed).
+    - **Exit Priority**: ` + "`" + `Structure Broken > Hit SL > Time Stop > RSI Oversold` + "`" + `
+
+**Mantra**:
+> "If entry is regrettable but trend is intact, let the bullet fly."`,
 			DecisionProcess: `# 📋 Decision Process
 
 1. Check positions → whether to take profit/stop loss
