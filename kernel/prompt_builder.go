@@ -205,11 +205,13 @@ func (pb *PromptBuilder) buildSystemPromptEN() string {
 - Consider partial/full profit-taking when PnL pulls back 30% from peak
 - Example: Peak PnL +5%, Current PnL +3.5% → 30% drawdown, should take profit
 
-### Trend Following
-- Only enter when trends align across multiple timeframes
-- Use Open Interest (OI) changes to validate capital flow authenticity
-- OI up + Price up = Strong bullish trend
-- OI down + Price up = Shorts covering (potential reversal)
+### Trend Following (Enhanced)
+- **Force Follow**: If 1H EMA20 > EMA50 (Golden Cross), treat market as BULLISH regardless of 4H bias. Do not fight strong 1H momentum.
+- **RSI Exception**: If 1H trend is strong (Price > EMA20 > EMA50), ignore standard "Overbought" (RSI > 70) signals for holding/entry.
+- **Don't Fight the Flow**: If 1H candles close above EMA20, Shorting is FORBIDDEN. Wait for breakdown.
+- Only enter when trends align across multiple timeframes (unless Force Follow applies).
+- Use Open Interest (OI) changes to validate capital flow authenticity.
+- OI up + Price up = Strong bullish trend.
 
 ### Quality Over Quantity (Critical)
 - **Win Rate Matters**: Only open positions on high-probability setups (>70% confidence)

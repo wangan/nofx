@@ -698,7 +698,7 @@ func (at *AutoTrader) runCycle() error {
 			Success:    false,
 		}
 
-		if err := at.executeDecisionWithRecord(&d, &actionRecord); err != nil {
+		if err := at.executeDecisionWithRecord(&d, &actionRecord, ctx.Positions); err != nil {
 			logger.Infof("❌ Failed to execute decision (%s %s): %v", d.Symbol, d.Action, err)
 			actionRecord.Error = err.Error()
 			record.ExecutionLog = append(record.ExecutionLog, fmt.Sprintf("❌ %s %s failed: %v", d.Symbol, d.Action, err))
@@ -1035,12 +1035,12 @@ func (at *AutoTrader) buildTradingContext() (*kernel.Context, error) {
 }
 
 // executeDecisionWithRecord executes AI decision and records detailed information
-func (at *AutoTrader) executeDecisionWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
+func (at *AutoTrader) executeDecisionWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction, ctxPositions []kernel.PositionInfo) error {
 	switch decision.Action {
 	case "open_long":
-		return at.executeOpenLongWithRecord(decision, actionRecord)
+		return at.executeOpenLongWithRecord(decision, actionRecord, ctxPositions)
 	case "open_short":
-		return at.executeOpenShortWithRecord(decision, actionRecord)
+		return at.executeOpenShortWithRecord(decision, actionRecord, ctxPositions)
 	case "close_long":
 		return at.executeCloseLongWithRecord(decision, actionRecord)
 	case "close_short":
@@ -1069,8 +1069,8 @@ func (at *AutoTrader) ExecuteDecision(d *kernel.Decision) error {
 		Reasoning:  d.Reasoning,
 	}
 
-	// Execute the decision
-	err := at.executeDecisionWithRecord(d, actionRecord)
+	// Execute the decision (pass nil for ctxPositions as external decisions don't have prompt context)
+	err := at.executeDecisionWithRecord(d, actionRecord, nil)
 	if err != nil {
 		logger.Errorf("[%s] External decision execution failed: %v", at.name, err)
 		return err
@@ -1081,13 +1081,45 @@ func (at *AutoTrader) ExecuteDecision(d *kernel.Decision) error {
 }
 
 // executeOpenLongWithRecord executes open long position and records detailed information
-func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
+func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction, ctxPositions []kernel.PositionInfo) error {
 	logger.Infof("  📈 Open long: %s", decision.Symbol)
 
 	// ⚠️ Get current positions for multiple checks
 	positions, err := at.trader.GetPositions()
 	if err != nil {
 		return fmt.Errorf("failed to get positions: %w", err)
+	}
+
+	// [GHOST POSITION CHECK]
+	// If context (AI prompt) thought we had a position, but current execution state shows none,
+	// then the AI likely intended to "Add" or "Hold+Flip" based on a phantom position.
+	// Opening a NEW naked position in this state is dangerous (State Desynchronization).
+	if ctxPositions != nil {
+		var ctxHasPos bool
+		for _, p := range ctxPositions {
+			// Check for ANY position in this symbol (Long or Short)
+			if p.Symbol == decision.Symbol && p.Quantity > 0 {
+				ctxHasPos = true
+				break
+			}
+		}
+
+		// Check if we CURRENTLY have a position
+		var currentHasPos bool
+		for _, pos := range positions {
+			if pos["symbol"] == decision.Symbol {
+				// Check quantity
+				if amt, ok := pos["positionAmt"].(float64); ok && math.Abs(amt) > 0 {
+					currentHasPos = true
+					break
+				}
+			}
+		}
+
+		if ctxHasPos && !currentHasPos {
+			logger.Warnf("⛔ [Ghost Position] Aborting Open Long for %s. Prompt showed position, but execution found none.", decision.Symbol)
+			return fmt.Errorf("ghost position detected: prompt showed position, execution found none")
+		}
 	}
 
 	// [CODE ENFORCED] Check max positions limit
@@ -1198,13 +1230,45 @@ func (at *AutoTrader) executeOpenLongWithRecord(decision *kernel.Decision, actio
 }
 
 // executeOpenShortWithRecord executes open short position and records detailed information
-func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction) error {
+func (at *AutoTrader) executeOpenShortWithRecord(decision *kernel.Decision, actionRecord *store.DecisionAction, ctxPositions []kernel.PositionInfo) error {
 	logger.Infof("  📉 Open short: %s", decision.Symbol)
 
 	// ⚠️ Get current positions for multiple checks
 	positions, err := at.trader.GetPositions()
 	if err != nil {
 		return fmt.Errorf("failed to get positions: %w", err)
+	}
+
+	// [GHOST POSITION CHECK]
+	// If context (AI prompt) thought we had a position, but current execution state shows none,
+	// then the AI likely intended to "Add" or "Hold+Flip" based on a phantom position.
+	// Opening a NEW naked position in this state is dangerous (State Desynchronization).
+	if ctxPositions != nil {
+		var ctxHasPos bool
+		for _, p := range ctxPositions {
+			// Check for ANY position in this symbol (Long or Short)
+			if p.Symbol == decision.Symbol && p.Quantity > 0 {
+				ctxHasPos = true
+				break
+			}
+		}
+
+		// Check if we CURRENTLY have a position
+		var currentHasPos bool
+		for _, pos := range positions {
+			if pos["symbol"] == decision.Symbol {
+				// Check quantity
+				if amt, ok := pos["positionAmt"].(float64); ok && math.Abs(amt) > 0 {
+					currentHasPos = true
+					break
+				}
+			}
+		}
+
+		if ctxHasPos && !currentHasPos {
+			logger.Warnf("⛔ [Ghost Position] Aborting Open Short for %s. Prompt showed position, but execution found none.", decision.Symbol)
+			return fmt.Errorf("ghost position detected: prompt showed position, execution found none")
+		}
 	}
 
 	// [CODE ENFORCED] Check max positions limit
