@@ -1735,6 +1735,12 @@ func extractDecisions(response string) ([]Decision, error) {
 	if match := reDecisionTag.FindStringSubmatch(s); match != nil && len(match) > 1 {
 		jsonPart = strings.TrimSpace(match[1])
 		logger.Infof("✓ Extracted JSON using <decision> tag")
+		
+		// Special handling for empty array in decision tag
+		if jsonPart == "[]" {
+			logger.Infof("✓ Detected empty decision array")
+			return []Decision{}, nil
+		}
 	} else {
 		jsonPart = s
 		logger.Infof("⚠️  <decision> tag not found, searching JSON in full text")
@@ -1758,6 +1764,12 @@ func extractDecisions(response string) ([]Decision, error) {
 
 	jsonContent := strings.TrimSpace(reJSONArray.FindString(jsonPart))
 	if jsonContent == "" {
+		// Fallback check for "[]" in raw text if regex failed
+		if strings.Contains(jsonPart, "[]") {
+			logger.Infof("✓ Detected empty decision array (fallback)")
+			return []Decision{}, nil
+		}
+
 		logger.Infof("⚠️  [SafeFallback] AI didn't output JSON decision, entering safe wait mode")
 
 		cotSummary := jsonPart
