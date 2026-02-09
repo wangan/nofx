@@ -31,6 +31,7 @@ var (
 	// XML tag extraction (supports any characters in reasoning chain)
 	reReasoningTag = regexp.MustCompile(`(?s)<reasoning>(.*?)</reasoning>`)
 	reDecisionTag  = regexp.MustCompile(`(?s)<decision>(.*?)</decision>`)
+	reEmptyArray   = regexp.MustCompile(`(?s)\[\s*\]`)
 )
 
 // ============================================================================
@@ -1765,7 +1766,7 @@ func extractDecisions(response string) ([]Decision, error) {
 	jsonContent := strings.TrimSpace(reJSONArray.FindString(jsonPart))
 	if jsonContent == "" {
 		// Fallback check for "[]" in raw text if regex failed
-		if strings.Contains(jsonPart, "[]") {
+		if reEmptyArray.MatchString(jsonPart) {
 			logger.Infof("✓ Detected empty decision array (fallback)")
 			return []Decision{}, nil
 		}
