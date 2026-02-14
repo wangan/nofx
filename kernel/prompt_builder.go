@@ -64,13 +64,23 @@ func (pb *PromptBuilder) buildSystemPromptZH() string {
 - 当持仓盈亏从峰值回撤30%时，考虑部分或全部止盈
 - 例如：Peak PnL +5%，Current PnL +3.5% → 回撤了30%，应该止盈
 
-### 顺势交易
-- 只在多个时间框架趋势一致时进场
-- 结合持仓量(OI)变化判断资金流向真实性
-- OI增加+价格上涨 = 强多头趋势
-- OI减少+价格上涨 = 空头平仓（可能反转）
+### 市场状态识别 (关键)
+- **第一步：识别市场状态**：判断当前是 **趋势市场** (EMA发散，价格在布林带外侧) 还是 **震荡市场** (EMA走平，价格在布林带内震荡)。
+- **如果是趋势市场 (Trending)**：
+    - **禁止逆势**：4H 均线多头排列时，禁止做空；空头排列时，禁止做多。
+    - **顺势回撤**：做多等待回撤至 EMA20/布林带中轨；做空等待反弹至 EMA20。
+- **如果是震荡市场 (Ranging)**：
+    - **高抛低吸**：在布林带上轨做空，下轨做多。
+    - **禁用趋势逻辑**：不要在震荡区间中部追涨杀跌。
 
-### 宁缺毋滥 (重要优化)
+### 狙击手模式 (精准入场)
+- **拒绝半空接刀**：严禁在布林带中轨和外轨之间的“无人区”开仓。
+- **入场确认**：
+    - **趋势单**：等待 K 线回踩 EMA20 并收出确认信号（如锤子线/吞没形态）。
+    - **震荡单**：等待 K 线触及布林带并出现反转信号。
+- **成交量确认**：突破或反转必须配合成交量放大，无量波动视为噪音。
+
+### 宁缺毋滥 (核心优化)
 - **胜率是核心指标**：只有在胜率超过 70% 的确定性机会下才开仓
 - **拒绝垃圾时间**：如果市场处于震荡或方向不明，坚决选择 WAIT
 - **避免假突破**：必须等待 K 线收盘确认突破，且必须有成交量显著放大
@@ -205,13 +215,23 @@ func (pb *PromptBuilder) buildSystemPromptEN() string {
 - Consider partial/full profit-taking when PnL pulls back 30% from peak
 - Example: Peak PnL +5%, Current PnL +3.5% → 30% drawdown, should take profit
 
-### Trend Following (Enhanced)
-- **Force Follow**: If 1H EMA20 > EMA50 (Golden Cross), treat market as BULLISH regardless of 4H bias. Do not fight strong 1H momentum.
-- **RSI Exception**: If 1H trend is strong (Price > EMA20 > EMA50), ignore standard "Overbought" (RSI > 70) signals for holding/entry.
-- **Don't Fight the Flow**: If 1H candles close above EMA20, Shorting is FORBIDDEN. Wait for breakdown.
-- Only enter when trends align across multiple timeframes (unless Force Follow applies).
-- Use Open Interest (OI) changes to validate capital flow authenticity.
-- OI up + Price up = Strong bullish trend.
+### Trend Following (Enhanced & STRICT)
+- **Market Regime ID (CRITICAL)**: First, identify if the market is **TRENDING** (Steep EMAs, High ADX, Price above/below bands) or **RANGING** (Flat EMAs, Low ADX, Price bouncing in bands).
+- **If TRENDING**:
+    - **Golden Rule**: If 4H Price > EMA20 > EMA50 (Bullish), **SHORTING IS FORBIDDEN**. Only LONG or WAIT.
+    - **Death Rule**: If 4H Price < EMA20 < EMA50 (Bearish), **LONGING IS FORBIDDEN**. Only SHORT or WAIT.
+    - **Force Follow**: If 1H EMA20 > EMA50 (Golden Cross), treat as BULLISH regardless of 4H bias.
+- **If RANGING**:
+    - **DISABLE Trend Following**. Use **Mean Reversion**.
+    - Buy at Support (Lower Band), Sell at Resistance (Upper Band).
+    - **Tight Stops**: Range plays require tighter stops as breakouts can be violent.
+
+### Sniper Mode (Precision Entry)
+- **No Floating Entries**: Do not open positions in "No Man's Land" (middle of Bollinger Bands).
+- **Entry Triggers**:
+    - **Trending Market**: Wait for pullback to EMA20 (1H) or dynamic support.
+    - **Ranging Market**: Wait for rejection at Upper/Lower Bollinger Bands.
+- **Confirmation**: Entry requires a candle close confirming rejection/support with **Volume Spike**.
 
 ### Quality Over Quantity (Critical)
 - **Win Rate Matters**: Only open positions on high-probability setups (>70% confidence)

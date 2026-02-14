@@ -272,20 +272,20 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 	}
 
 	// Ensure OITopDataMap is initialized
-	if ctx.OITopDataMap == nil {
-		ctx.OITopDataMap = make(map[string]*OITopData)
-		oiPositions, err := engine.nofxosClient.GetOITopPositions()
-		if err == nil {
-			for _, pos := range oiPositions {
-				ctx.OITopDataMap[pos.Symbol] = &OITopData{
-					Rank:              pos.Rank,
-					OIDeltaPercent:    pos.OIDeltaPercent,
-					OIDeltaValue:      pos.OIDeltaValue,
-					PriceDeltaPercent: pos.PriceDeltaPercent,
-				}
-			}
-		}
-	}
+	// if ctx.OITopDataMap == nil {
+	// 	ctx.OITopDataMap = make(map[string]*OITopData)
+	// 	oiPositions, err := engine.nofxosClient.GetOITopPositions()
+	// 	if err == nil {
+	// 		for _, pos := range oiPositions {
+	// 			ctx.OITopDataMap[pos.Symbol] = &OITopData{
+	// 				Rank:              pos.Rank,
+	// 				OIDeltaPercent:    pos.OIDeltaPercent,
+	// 				OIDeltaValue:      pos.OIDeltaValue,
+	// 				PriceDeltaPercent: pos.PriceDeltaPercent,
+	// 			}
+	// 		}
+	// 	}
+	// }
 
 	// 2. Build System Prompt using strategy engine
 	riskConfig := engine.GetRiskControlConfig()
@@ -376,7 +376,7 @@ func fetchMarketDataWithStrategy(ctx *Context, engine *StrategyEngine) error {
 		positionSymbols[pos.Symbol] = true
 	}
 
-	const minOIThresholdMillions = 15.0 // 15M USD minimum open interest value
+	// const minOIThresholdMillions = 15.0 // 15M USD minimum open interest value
 
 	for _, coin := range ctx.CandidateCoins {
 		if _, exists := ctx.MarketDataMap[coin.Symbol]; exists {
@@ -390,20 +390,20 @@ func fetchMarketDataWithStrategy(ctx *Context, engine *StrategyEngine) error {
 		}
 
 		// Liquidity filter (skip for xyz dex assets - they don't have OI data from Binance)
-		isExistingPosition := positionSymbols[coin.Symbol]
-		isXyzAsset := market.IsXyzDexAsset(coin.Symbol)
-		if !isExistingPosition && !isXyzAsset && data.OpenInterest != nil && data.CurrentPrice > 0 {
-			// Skip OI check if OI is 0 (likely data source issue or disabled)
-			if data.OpenInterest.Latest > 0 {
-				oiValue := data.OpenInterest.Latest * data.CurrentPrice
-				oiValueInMillions := oiValue / 1_000_000
-				if oiValueInMillions < minOIThresholdMillions {
-					logger.Infof("⚠️  %s OI value too low (%.2fM USD < %.1fM), skipping coin",
-						coin.Symbol, oiValueInMillions, minOIThresholdMillions)
-					continue
-				}
-			}
-		}
+		// isExistingPosition := positionSymbols[coin.Symbol]
+		// isXyzAsset := market.IsXyzDexAsset(coin.Symbol)
+		// if !isExistingPosition && !isXyzAsset && data.OpenInterest != nil && data.CurrentPrice > 0 {
+		// 	// Skip OI check if OI is 0 (likely data source issue or disabled)
+		// 	if data.OpenInterest.Latest > 0 {
+		// 		oiValue := data.OpenInterest.Latest * data.CurrentPrice
+		// 		oiValueInMillions := oiValue / 1_000_000
+		// 		if oiValueInMillions < minOIThresholdMillions {
+		// 			logger.Infof("⚠️  %s OI value too low (%.2fM USD < %.1fM), skipping coin",
+		// 				coin.Symbol, oiValueInMillions, minOIThresholdMillions)
+		// 			continue
+		// 		}
+		// 	}
+		// }
 
 		ctx.MarketDataMap[coin.Symbol] = data
 	}
@@ -731,8 +731,11 @@ func extractJSONPath(data interface{}, path string) interface{} {
 	return current
 }
 
-// FetchQuantData fetches quantitative data for a single coin
+	// FetchQuantData fetches quantitative data for a single coin
 func (e *StrategyEngine) FetchQuantData(symbol string) (*QuantData, error) {
+	// Force disable Quant Data
+	return nil, nil
+	/*
 	if !e.config.Indicators.EnableQuantData {
 		return nil, nil
 	}
@@ -802,6 +805,7 @@ func (e *StrategyEngine) FetchQuantData(symbol string) (*QuantData, error) {
 	}
 
 	return quantData, nil
+	*/
 }
 
 // FetchQuantDataBatch batch fetches quantitative data
@@ -828,6 +832,8 @@ func (e *StrategyEngine) FetchQuantDataBatch(symbols []string) map[string]*Quant
 
 // FetchOIRankingData fetches market-wide OI ranking data
 func (e *StrategyEngine) FetchOIRankingData() *nofxos.OIRankingData {
+	return nil
+	/*
 	indicators := e.config.Indicators
 	if !indicators.EnableOIRanking {
 		return nil
@@ -855,10 +861,13 @@ func (e *StrategyEngine) FetchOIRankingData() *nofxos.OIRankingData {
 		len(data.TopPositions), len(data.LowPositions))
 
 	return data
+	*/
 }
 
 // FetchNetFlowRankingData fetches market-wide NetFlow ranking data
 func (e *StrategyEngine) FetchNetFlowRankingData() *nofxos.NetFlowRankingData {
+	return nil
+	/*
 	indicators := e.config.Indicators
 	if !indicators.EnableNetFlowRanking {
 		return nil
@@ -887,6 +896,7 @@ func (e *StrategyEngine) FetchNetFlowRankingData() *nofxos.NetFlowRankingData {
 		len(data.PersonalFutureTop), len(data.PersonalFutureLow))
 
 	return data
+	*/
 }
 
 // FetchPriceRankingData fetches market-wide price ranking data (gainers/losers)
@@ -1426,18 +1436,18 @@ func (e *StrategyEngine) formatMarketData(data *market.Data) string {
 
 	sb.WriteString("\n\n")
 
-	if indicators.EnableOI || indicators.EnableFundingRate {
-		sb.WriteString(fmt.Sprintf("Additional data for %s:\n\n", data.Symbol))
+	// if indicators.EnableOI || indicators.EnableFundingRate {
+	// 	sb.WriteString(fmt.Sprintf("Additional data for %s:\n\n", data.Symbol))
 
-		if indicators.EnableOI && data.OpenInterest != nil {
-			sb.WriteString(fmt.Sprintf("Open Interest: Latest: %.2f Average: %.2f\n\n",
-				data.OpenInterest.Latest, data.OpenInterest.Average))
-		}
+	// 	if indicators.EnableOI && data.OpenInterest != nil {
+	// 		sb.WriteString(fmt.Sprintf("Open Interest: Latest: %.2f Average: %.2f\n\n",
+	// 			data.OpenInterest.Latest, data.OpenInterest.Average))
+	// 	}
 
-		if indicators.EnableFundingRate {
-			sb.WriteString(fmt.Sprintf("Funding Rate: %.2e\n\n", data.FundingRate))
-		}
-	}
+	// 	if indicators.EnableFundingRate {
+	// 		sb.WriteString(fmt.Sprintf("Funding Rate: %.2e\n\n", data.FundingRate))
+	// 	}
+	// }
 
 	if len(data.TimeframeData) > 0 {
 		timeframeOrder := []string{"1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "6h", "8h", "12h", "1d", "3d", "1w"}

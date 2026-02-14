@@ -553,6 +553,34 @@ func (at *AutoTrader) runCycle() error {
 		logger.Info("📅 Daily P&L reset")
 	}
 
+	// [New] Calculate Realized Daily PnL from DB (Robust across restarts)
+	startOfDay := time.Now().UTC().Truncate(24 * time.Hour)
+	dailyRealizedPnL := 0.0
+	if at.store != nil {
+		closedPositions, err := at.store.Position().GetClosedPositions(at.id, 100)
+		if err == nil {
+			for _, pos := range closedPositions {
+				exitTime := time.Unix(pos.ExitTime/1000, (pos.ExitTime%1000)*1000000)
+				if exitTime.After(startOfDay) {
+					dailyRealizedPnL += (pos.RealizedPnL - pos.Fee)
+				}
+			}
+		}
+	}
+	at.dailyPnL = dailyRealizedPnL
+	logger.Infof("📊 Daily Realized PnL (since 00:00 UTC): %.2f USDT", at.dailyPnL)
+
+	// [Circuit Breaker] Daily PnL Limit (Temporarily relaxed to -40.0 to test new strategy)
+	if at.dailyPnL <= -40.0 {
+		errMsg := fmt.Sprintf("⛔ Circuit Breaker Triggered: Daily PnL (%.2f) exceeded limit (-40.0). Trading paused for 4h.", at.dailyPnL)
+		logger.Error(errMsg)
+		record.Success = false
+		record.ErrorMessage = errMsg
+		at.saveDecision(record)
+		at.stopUntil = time.Now().Add(4 * time.Hour)
+		return nil
+	}
+
 	// 4. Collect trading context
 	ctx, err := at.buildTradingContext()
 	if err != nil {
