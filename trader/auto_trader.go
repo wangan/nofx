@@ -153,26 +153,9 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 
 	switch aiModel {
 	case "claude":
-		// Check if custom API is provided (e.g. OpenAI-compatible endpoint)
-		if config.CustomAPIURL != "" {
-			// If URL contains "v1/chat/completions" or similar OpenAI style, assume OpenAI compatibility
-			// Or just assume any custom URL for "claude" model implies using OpenAI-compatible wrapper (like OneAPI/NewAPI)
-			// unless explicitly stated otherwise.
-			// But to be safe, let's stick to OpenAI client if CustomAPIURL is set, 
-			// because most aggregators provide OpenAI-compatible interface even for Claude models.
-			mcpClient = mcp.NewClient(
-				mcp.WithProvider(mcp.ProviderCustom), // Force custom provider (OpenAI compatible)
-				mcp.WithBaseURL(config.CustomAPIURL),
-				mcp.WithAPIKey(config.CustomAPIKey),
-				mcp.WithModel(config.CustomModelName),
-			)
-			logger.Infof("🤖 [%s] Using Custom AI API for Claude model: %s (OpenAI compatible mode)", config.Name, config.CustomModelName)
-		} else {
-			// Native Anthropic API
-			mcpClient = mcp.NewClaudeClient()
-			mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
-			logger.Infof("🤖 [%s] Using Native Claude AI", config.Name)
-		}
+		mcpClient = mcp.NewClaudeClient()
+		mcpClient.SetAPIKey(config.CustomAPIKey, config.CustomAPIURL, config.CustomModelName)
+		logger.Infof("🤖 [%s] Using Claude AI", config.Name)
 
 	case "kimi":
 		mcpClient = mcp.NewKimiClient()
@@ -209,24 +192,13 @@ func NewAutoTrader(config AutoTraderConfig, st *store.Store, userID string) (*Au
 		logger.Infof("🤖 [%s] Using custom AI API: %s (model: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
 
 	default: // deepseek or empty
-		// If custom URL is provided but model is not explicitly "custom", treat as custom/OpenAI compatible
-		if config.CustomAPIURL != "" {
-			mcpClient = mcp.NewClient(
-				mcp.WithProvider(mcp.ProviderCustom),
-				mcp.WithBaseURL(config.CustomAPIURL),
-				mcp.WithAPIKey(config.CustomAPIKey),
-				mcp.WithModel(config.CustomModelName),
-			)
-			logger.Infof("🤖 [%s] Using Custom AI API (auto-detected): %s (model: %s)", config.Name, config.CustomAPIURL, config.CustomModelName)
-		} else {
-			mcpClient = mcp.NewDeepSeekClient()
-			apiKey := config.DeepSeekKey
-			if apiKey == "" {
-				apiKey = config.CustomAPIKey
-			}
-			mcpClient.SetAPIKey(apiKey, config.CustomAPIURL, config.CustomModelName)
-			logger.Infof("🤖 [%s] Using DeepSeek AI", config.Name)
+		mcpClient = mcp.NewDeepSeekClient()
+		apiKey := config.DeepSeekKey
+		if apiKey == "" {
+			apiKey = config.CustomAPIKey
 		}
+		mcpClient.SetAPIKey(apiKey, config.CustomAPIURL, config.CustomModelName)
+		logger.Infof("🤖 [%s] Using DeepSeek AI", config.Name)
 	}
 
 	if config.CustomAPIURL != "" || config.CustomModelName != "" {
