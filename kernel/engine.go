@@ -204,6 +204,138 @@ type StrategyEngine struct {
 	nofxosClient *nofxos.Client
 }
 
+// MarketRegime 市场状态分类
+type MarketRegime int
+
+const (
+	RegimeTrendingUp MarketRegime = iota  // 上升趋势
+	RegimeTrendingDown                     // 下降趋势
+	RegimeChop                             // 震荡盘整
+	RegimeSniper                           // 狙击手模式（低胜率+连续亏损）
+	RegimeExtremeChop                      // 极度震荡（低波动率+无趋势）
+)
+
+// calculateVolatility 计算波动率（基于ATR）
+func calculateVolatility(marketDataMap map[string]*market.Data) float64 {
+	var totalATR float64
+	var count int
+	
+	for _, data := range marketDataMap {
+		if data != nil {
+			// 从 IntradayData 或 LongerTermData 获取 ATR14
+			if data.IntradaySeries != nil && data.IntradaySeries.ATR14 > 0 {
+				totalATR += data.IntradaySeries.ATR14
+				count++
+			} else if data.LongerTermContext != nil && data.LongerTermContext.ATR14 > 0 {
+				totalATR += data.LongerTermContext.ATR14
+				count++
+			}
+		}
+	}
+	
+	if count == 0 {
+		return 0
+	}
+	
+	return totalATR / float64(count)
+}
+
+// calculateTrendStrength 计算趋势强度（基于EMA斜率和RSI）
+func calculateTrendStrength(marketDataMap map[string]*market.Data) float64 {
+	var totalStrength float64
+	var count int
+	
+	for _, data := range marketDataMap {
+		if data != nil && data.LongerTermContext != nil {
+			// 趋势强度 = EMA斜率 * 0.6 + RSI位置 * 0.4
+			emaSlope := data.CurrentEMA20 - data.LongerTermContext.EMA50
+			rsiPosition := (data.CurrentRSI7 - 50) / 50
+			
+			strength := (emaSlope / maxFloat(abs(data.CurrentEMA20), abs(data.LongerTermContext.EMA50)) * 0.6) + 
+				(rsiPosition * 0.4)
+				
+			totalStrength += abs(strength)
+			count++
+		}
+	}
+	
+	if count == 0 {
+		return 0
+	}
+	
+	return totalStrength / float64(count)
+}
+
+// abs 返回绝对值
+func abs(x float64) float64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// maxFloat 返回最大值（重命名以避免与grid_engine.go中的max函数冲突）
+func maxFloat(x, y float64) float64 {
+	if x > y {
+		return x
+	}
+	return y
+}
+
+// classifyMarketRegime 精细的市场状态分类
+func (e *StrategyEngine) classifyMarketRegime(ctx *Context) MarketRegime {
+	// 基础分类：连续亏损
+	isSniper := ctx.TradingStats != nil && ctx.TradingStats.ProfitFactor < 0.8
+	
+	// 波动率分析
+	volatility := calculateVolatility(ctx.MarketDataMap)
+	isLowVolatility := volatility < 100  // 根据BTC市场调整
+	
+	// 趋势强度分析
+	trendStrength := calculateTrendStrength(ctx.MarketDataMap)
+	isStrongTrend := trendStrength > 0.2
+	isWeakTrend := trendStrength < 0.1
+	
+	// 市场状态综合判断
+	if isSniper {
+		if isLowVolatility && isWeakTrend {
+			return RegimeExtremeChop
+		}
+		return RegimeSniper
+	}
+	
+	if isStrongTrend {
+		// 判断趋势方向
+		var hasUpTrend, hasDownTrend bool
+		for _, data := range ctx.MarketDataMap {
+			if data != nil && data.LongerTermContext != nil {
+				// EMA20 > EMA50 且价格在均线上方
+				if data.CurrentEMA20 > data.LongerTermContext.EMA50 && data.CurrentPrice > data.CurrentEMA20 {
+					hasUpTrend = true
+				}
+				// EMA20 < EMA50 且价格在均线下方
+				if data.CurrentEMA20 < data.LongerTermContext.EMA50 && data.CurrentPrice < data.CurrentEMA20 {
+					hasDownTrend = true
+				}
+			}
+		}
+		
+		if hasUpTrend {
+			return RegimeTrendingUp
+		}
+		if hasDownTrend {
+			return RegimeTrendingDown
+		}
+	}
+	
+	// 震荡模式
+	if isWeakTrend {
+		return RegimeChop
+	}
+	
+	return RegimeChop  // 默认
+}
+
 // NewStrategyEngine creates strategy execution engine
 func NewStrategyEngine(config *store.StrategyConfig) *StrategyEngine {
 	// Create NofxOS client with API key from config
@@ -271,30 +403,40 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 		}
 	}
 
-	// Ensure OITopDataMap is initialized
-	// if ctx.OITopDataMap == nil {
-	// 	ctx.OITopDataMap = make(map[string]*OITopData)
-	// 	oiPositions, err := engine.nofxosClient.GetOITopPositions()
-	// 	if err == nil {
-	// 		for _, pos := range oiPositions {
-	// 			ctx.OITopDataMap[pos.Symbol] = &OITopData{
-	// 				Rank:              pos.Rank,
-	// 				OIDeltaPercent:    pos.OIDeltaPercent,
-	// 				OIDeltaValue:      pos.OIDeltaValue,
-	// 				PriceDeltaPercent: pos.PriceDeltaPercent,
-	// 			}
-	// 		}
-	// 	}
-	// }
+	// 2. Quick market regime check to avoid unnecessary AI calls
+	regime := engine.classifyMarketRegime(ctx)
+	
+	// 如果是极度震荡模式且无明显信号，直接返回wait决策，避免AI分析
+	if regime == RegimeExtremeChop || regime == RegimeSniper {
+		logger.Infof("📊 Market in %s, no high-confidence opportunities, returning wait decision directly", getRegimeName(regime))
+		
+		// 快速返回wait决策，避免AI调用
+		return &FullDecision{
+			SystemPrompt:        "Market regime check",
+			UserPrompt:          "Quick market regime analysis",
+			CoTTrace: fmt.Sprintf("Market in %s, low volatility and no clear trend. No high-confidence trading opportunities.", getRegimeName(regime)),
+			Decisions: []Decision{
+				{
+					Symbol:     "BTCUSDT", // 默认币种，可根据实际情况调整
+					Action:     "wait",
+					Confidence: 90,
+					Reasoning: fmt.Sprintf("Market in %s, no high-confidence opportunities. Strictly follow strategy rules to wait for better conditions.", getRegimeName(regime)),
+				},
+			},
+			RawResponse:         "Quick decision: wait",
+			Timestamp:           time.Now(),
+			AIRequestDurationMs: 0, // 快速决策，无AI响应时间
+		}, nil
+	}
 
-	// 2. Build System Prompt using strategy engine
+	// 3. Build System Prompt using strategy engine
 	riskConfig := engine.GetRiskControlConfig()
 	systemPrompt := engine.BuildSystemPrompt(ctx.Account.TotalEquity, variant)
 
-	// 3. Build User Prompt using strategy engine
+	// 4. Build User Prompt using strategy engine
 	userPrompt := engine.BuildUserPrompt(ctx)
 
-	// 4. Call AI API
+	// 5. Call AI API
 	aiCallStart := time.Now()
 	aiResponse, err := mcpClient.CallWithMessages(systemPrompt, userPrompt)
 	aiCallDuration := time.Since(aiCallStart)
@@ -302,7 +444,7 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 		return nil, fmt.Errorf("AI API call failed: %w", err)
 	}
 
-	// 5. Parse AI response
+	// 6. Parse AI response
 	decision, err := parseFullDecisionResponse(
 		aiResponse,
 		ctx.Account.TotalEquity,
@@ -325,6 +467,24 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 	}
 
 	return decision, nil
+}
+
+// getRegimeName 获取市场状态名称（用于日志和提示）
+func getRegimeName(regime MarketRegime) string {
+	switch regime {
+	case RegimeTrendingUp:
+		return "上升趋势"
+	case RegimeTrendingDown:
+		return "下降趋势"
+	case RegimeChop:
+		return "震荡盘整"
+	case RegimeSniper:
+		return "狙击手模式"
+	case RegimeExtremeChop:
+		return "极度震荡模式"
+	default:
+		return "未知模式"
+	}
 }
 
 // ============================================================================
