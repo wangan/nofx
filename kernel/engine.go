@@ -330,15 +330,15 @@ func (e *StrategyEngine) classifyMarketRegime(ctx *Context) MarketRegime {
 	// 基础分类：连续亏损
 	isSniper := ctx.TradingStats != nil && ctx.TradingStats.ProfitFactor < 0.8
 	
-	// 波动率分析
+	// 波动率分析（调整阈值）
 	volatility := calculateVolatilityAdvanced(ctx.MarketDataMap)
-	isLowVolatility := volatility < 100  // 根据BTC市场调整
+	isLowVolatility := volatility < 80  // 降低极度震荡模式的波动率阈值
 	isHighVolatility := volatility > 300
 	
-	// 趋势强度分析
+	// 趋势强度分析（调整阈值）
 	trendStrength := calculateTrendStrength(ctx.MarketDataMap)
-	isStrongTrend := trendStrength > 0.25
-	isWeakTrend := trendStrength < 0.15
+	isStrongTrend := trendStrength > 0.2
+	isWeakTrend := trendStrength < 0.1
 	
 	// 市场状态综合判断
 	if isSniper {
