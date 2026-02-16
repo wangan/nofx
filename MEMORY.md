@@ -2,7 +2,7 @@
 
 ## 🎯 Project: $100k Trading Challenge
 - **Start Date**: 2026-01-27
-- **Current Equity**: $173.99 (as of 2026-02-17 02:00)
+- **Current Equity**: $173.22 (as of 2026-02-17 06:00)
 - **Goal**: Reach $100,000 using AI automated trading system.
 
 ## ⚙️ System Configuration
