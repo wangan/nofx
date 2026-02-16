@@ -240,19 +240,27 @@ func calculateVolatility(marketDataMap map[string]*market.Data) float64 {
 	return totalATR / float64(count)
 }
 
-// calculateTrendStrength 计算趋势强度（基于EMA斜率和RSI）
+// calculateTrendStrength 计算趋势强度（基于EMA斜率、RSI和MACD）
 func calculateTrendStrength(marketDataMap map[string]*market.Data) float64 {
 	var totalStrength float64
 	var count int
 	
 	for _, data := range marketDataMap {
 		if data != nil && data.LongerTermContext != nil {
-			// 趋势强度 = EMA斜率 * 0.6 + RSI位置 * 0.4
+			// 趋势强度 = EMA斜率 * 0.4 + RSI位置 * 0.3 + MACD信号 * 0.3
 			emaSlope := data.CurrentEMA20 - data.LongerTermContext.EMA50
 			rsiPosition := (data.CurrentRSI7 - 50) / 50
 			
-			strength := (emaSlope / maxFloat(abs(data.CurrentEMA20), abs(data.LongerTermContext.EMA50)) * 0.6) + 
-				(rsiPosition * 0.4)
+			// 计算MACD信号强度
+			var macdSignal float64
+			if data.MACD != nil && data.MACD.MACD > data.MACD.Signal {
+				macdSignal = 0.5 // 金叉
+			} else if data.MACD != nil && data.MACD.MACD < data.MACD.Signal {
+				macdSignal = -0.5 // 死叉
+			}
+			
+			strength := (emaSlope / maxFloat(abs(data.CurrentEMA20), abs(data.LongerTermContext.EMA50)) * 0.4) + 
+				(rsiPosition * 0.3) + (macdSignal * 0.3)
 				
 			totalStrength += abs(strength)
 			count++
@@ -264,6 +272,41 @@ func calculateTrendStrength(marketDataMap map[string]*market.Data) float64 {
 	}
 	
 	return totalStrength / float64(count)
+}
+
+// calculateVolatilityAdvanced 计算高级波动率指标（基于ATR和价格变化）
+func calculateVolatilityAdvanced(marketDataMap map[string]*market.Data) float64 {
+	var totalVolatility float64
+	var count int
+	
+	for _, data := range marketDataMap {
+		if data != nil {
+			// 综合波动率 = ATR * 0.6 + 价格标准差 * 0.4
+			atr := 0.0
+			if data.IntradaySeries != nil && data.IntradaySeries.ATR14 > 0 {
+				atr = data.IntradaySeries.ATR14
+			} else if data.LongerTermContext != nil && data.LongerTermContext.ATR14 > 0 {
+				atr = data.LongerTermContext.ATR14
+			}
+			
+			// 计算价格变化率
+			var priceChangePct float64
+			if data.LongerTermContext != nil && data.LongerTermContext.Price > 0 {
+				priceChangePct = abs((data.CurrentPrice - data.LongerTermContext.Price) / data.LongerTermContext.Price * 100)
+			}
+			
+			// 综合波动率计算
+			volatility := atr * 0.6 + priceChangePct * 0.4
+			totalVolatility += volatility
+			count++
+		}
+	}
+	
+	if count == 0 {
+		return 0
+	}
+	
+	return totalVolatility / float64(count)
 }
 
 // abs 返回绝对值
@@ -282,19 +325,20 @@ func maxFloat(x, y float64) float64 {
 	return y
 }
 
-// classifyMarketRegime 精细的市场状态分类
+// classifyMarketRegime 精细的市场状态分类（优化版）
 func (e *StrategyEngine) classifyMarketRegime(ctx *Context) MarketRegime {
 	// 基础分类：连续亏损
 	isSniper := ctx.TradingStats != nil && ctx.TradingStats.ProfitFactor < 0.8
 	
 	// 波动率分析
-	volatility := calculateVolatility(ctx.MarketDataMap)
+	volatility := calculateVolatilityAdvanced(ctx.MarketDataMap)
 	isLowVolatility := volatility < 100  // 根据BTC市场调整
+	isHighVolatility := volatility > 300
 	
 	// 趋势强度分析
 	trendStrength := calculateTrendStrength(ctx.MarketDataMap)
-	isStrongTrend := trendStrength > 0.2
-	isWeakTrend := trendStrength < 0.1
+	isStrongTrend := trendStrength > 0.25
+	isWeakTrend := trendStrength < 0.15
 	
 	// 市场状态综合判断
 	if isSniper {
@@ -304,7 +348,7 @@ func (e *StrategyEngine) classifyMarketRegime(ctx *Context) MarketRegime {
 		return RegimeSniper
 	}
 	
-	if isStrongTrend {
+	if isHighVolatility && isStrongTrend {
 		// 判断趋势方向
 		var hasUpTrend, hasDownTrend bool
 		for _, data := range ctx.MarketDataMap {
@@ -330,6 +374,14 @@ func (e *StrategyEngine) classifyMarketRegime(ctx *Context) MarketRegime {
 	
 	// 震荡模式
 	if isWeakTrend {
+		if isLowVolatility {
+			return RegimeExtremeChop
+		}
+		return RegimeChop
+	}
+	
+	// 中等波动率和中等趋势强度
+	if volatility >= 100 && volatility <= 300 && trendStrength >= 0.15 && trendStrength <= 0.25 {
 		return RegimeChop
 	}
 	
@@ -386,6 +438,51 @@ func GetFullDecision(ctx *Context, mcpClient mcp.AIClient) (*FullDecision, error
 	return GetFullDecisionWithStrategy(ctx, mcpClient, engine, "")
 }
 
+// adjustStrategyForRegime 根据市场状态调整策略参数
+func adjustStrategyForRegime(config *store.StrategyConfig, regime MarketRegime) {
+	switch regime {
+	case RegimeTrendingUp:
+		// 上升趋势：激进策略
+		config.RiskControl.BTCETHMaxLeverage = 10
+		config.RiskControl.AltcoinMaxLeverage = 8
+		config.RiskControl.BTCETHMaxPositionValueRatio = 0.08
+		config.RiskControl.AltcoinMaxPositionValueRatio = 0.05
+		logger.Infof("📈 上升趋势策略调整：提高杠杆和仓位大小")
+		
+	case RegimeTrendingDown:
+		// 下降趋势：保守策略
+		config.RiskControl.BTCETHMaxLeverage = 8
+		config.RiskControl.AltcoinMaxLeverage = 6
+		config.RiskControl.BTCETHMaxPositionValueRatio = 0.06
+		config.RiskControl.AltcoinMaxPositionValueRatio = 0.04
+		logger.Infof("📉 下降趋势策略调整：降低杠杆和仓位大小")
+		
+	case RegimeChop:
+		// 震荡盘整：中性策略
+		config.RiskControl.BTCETHMaxLeverage = 5
+		config.RiskControl.AltcoinMaxLeverage = 4
+		config.RiskControl.BTCETHMaxPositionValueRatio = 0.04
+		config.RiskControl.AltcoinMaxPositionValueRatio = 0.03
+		logger.Infof("📊 震荡盘整策略调整：中性杠杆和仓位大小")
+		
+	case RegimeExtremeChop:
+		// 极度震荡：极保守策略
+		config.RiskControl.BTCETHMaxLeverage = 3
+		config.RiskControl.AltcoinMaxLeverage = 2
+		config.RiskControl.BTCETHMaxPositionValueRatio = 0.02
+		config.RiskControl.AltcoinMaxPositionValueRatio = 0.01
+		logger.Infof("⚠️ 极度震荡策略调整：极低杠杆和仓位大小")
+		
+	case RegimeSniper:
+		// 狙击手模式：严格风控策略
+		config.RiskControl.BTCETHMaxLeverage = 4
+		config.RiskControl.AltcoinMaxLeverage = 3
+		config.RiskControl.BTCETHMaxPositionValueRatio = 0.03
+		config.RiskControl.AltcoinMaxPositionValueRatio = 0.02
+		logger.Infof("🎯 狙击手模式策略调整：严格风控参数")
+	}
+}
+
 // GetFullDecisionWithStrategy uses StrategyEngine to get AI decision (unified prompt generation)
 func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *StrategyEngine, variant string) (*FullDecision, error) {
 	if ctx == nil {
@@ -405,6 +502,9 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 
 	// 2. Quick market regime check to avoid unnecessary AI calls
 	regime := engine.classifyMarketRegime(ctx)
+	
+	// 根据市场状态调整策略参数
+	adjustStrategyForRegime(engine.GetConfig(), regime)
 	
 	// 如果是极度震荡模式且无明显信号，直接返回wait决策，避免AI分析
 	if regime == RegimeExtremeChop || regime == RegimeSniper {
@@ -527,6 +627,13 @@ func fetchMarketDataWithStrategy(ctx *Context, engine *StrategyEngine) error {
 			logger.Infof("⚠️  Failed to fetch market data for position %s: %v", pos.Symbol, err)
 			continue
 		}
+		
+		// 数据质量检查
+		if data == nil || data.CurrentPrice <= 0 {
+			logger.Infof("⚠️  Invalid market data for position %s: price is %v", pos.Symbol, data.CurrentPrice)
+			continue
+		}
+		
 		ctx.MarketDataMap[pos.Symbol] = data
 	}
 
@@ -535,8 +642,6 @@ func fetchMarketDataWithStrategy(ctx *Context, engine *StrategyEngine) error {
 	for _, pos := range ctx.Positions {
 		positionSymbols[pos.Symbol] = true
 	}
-
-	// const minOIThresholdMillions = 15.0 // 15M USD minimum open interest value
 
 	for _, coin := range ctx.CandidateCoins {
 		if _, exists := ctx.MarketDataMap[coin.Symbol]; exists {
@@ -548,27 +653,28 @@ func fetchMarketDataWithStrategy(ctx *Context, engine *StrategyEngine) error {
 			logger.Infof("⚠️  Failed to fetch market data for %s: %v", coin.Symbol, err)
 			continue
 		}
+		
+		// 数据质量检查
+		if data == nil || data.CurrentPrice <= 0 {
+			logger.Infof("⚠️  Invalid market data for %s: price is %v", coin.Symbol, data.CurrentPrice)
+			continue
+		}
 
-		// Liquidity filter (skip for xyz dex assets - they don't have OI data from Binance)
-		// isExistingPosition := positionSymbols[coin.Symbol]
-		// isXyzAsset := market.IsXyzDexAsset(coin.Symbol)
-		// if !isExistingPosition && !isXyzAsset && data.OpenInterest != nil && data.CurrentPrice > 0 {
-		// 	// Skip OI check if OI is 0 (likely data source issue or disabled)
-		// 	if data.OpenInterest.Latest > 0 {
-		// 		oiValue := data.OpenInterest.Latest * data.CurrentPrice
-		// 		oiValueInMillions := oiValue / 1_000_000
-		// 		if oiValueInMillions < minOIThresholdMillions {
-		// 			logger.Infof("⚠️  %s OI value too low (%.2fM USD < %.1fM), skipping coin",
-		// 				coin.Symbol, oiValueInMillions, minOIThresholdMillions)
-		// 			continue
-		// 		}
-		// 	}
-		// }
+		// 备用数据源检查
+		if data.OpenInterest == nil || data.OpenInterest.Latest == 0 {
+			logger.Infof("⚠️  Open interest data missing for %s, using price-based liquidity filter", coin.Symbol)
+		}
 
 		ctx.MarketDataMap[coin.Symbol] = data
 	}
 
 	logger.Infof("📊 Successfully fetched multi-timeframe market data for %d coins", len(ctx.MarketDataMap))
+	
+	// 数据完整性检查
+	if len(ctx.MarketDataMap) < 3 {
+		logger.Warnf("⚠️  Market data coverage is low: only %d coins loaded", len(ctx.MarketDataMap))
+	}
+
 	return nil
 }
 
@@ -1314,24 +1420,19 @@ func (e *StrategyEngine) writeAvailableIndicators(sb *strings.Builder) {
 func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 	var sb strings.Builder
 
-	// System status
-	sb.WriteString(fmt.Sprintf("Time: %s | Period: #%d | Runtime: %d minutes\n\n",
-		ctx.CurrentTime, ctx.CallCount, ctx.RuntimeMinutes))
+	// System status (optimized)
+	sb.WriteString(fmt.Sprintf("Time: %s | Period: #%d\n\n",
+		ctx.CurrentTime, ctx.CallCount))
 
-	// BTC market
+	// BTC market (optimized)
 	if btcData, hasBTC := ctx.MarketDataMap["BTCUSDT"]; hasBTC {
-		sb.WriteString(fmt.Sprintf("BTC: %.2f (1h: %+.2f%%, 4h: %+.2f%%) | MACD: %.4f | RSI: %.2f\n\n",
-			btcData.CurrentPrice, btcData.PriceChange1h, btcData.PriceChange4h,
-			btcData.CurrentMACD, btcData.CurrentRSI7))
+		sb.WriteString(fmt.Sprintf("BTC: %.2f | MACD: %.4f | RSI: %.2f\n\n",
+			btcData.CurrentPrice, btcData.CurrentMACD, btcData.CurrentRSI7))
 	}
 
-	// Account information
-	sb.WriteString(fmt.Sprintf("Account: Equity %.2f | Balance %.2f (%.1f%%) | PnL %+.2f%% | Margin %.1f%% | Positions %d\n\n",
+	// Account information (optimized)
+	sb.WriteString(fmt.Sprintf("Equity: %.2f | Positions: %d\n\n",
 		ctx.Account.TotalEquity,
-		ctx.Account.AvailableBalance,
-		(ctx.Account.AvailableBalance/ctx.Account.TotalEquity)*100,
-		ctx.Account.TotalPnLPct,
-		ctx.Account.MarginUsedPct,
 		ctx.Account.PositionCount))
 
 	// Recently completed orders (placed before positions to ensure visibility)
@@ -1351,63 +1452,22 @@ func (e *StrategyEngine) BuildUserPrompt(ctx *Context) string {
 		sb.WriteString("\n")
 	}
 
-	// Historical trading statistics (helps AI understand past performance)
+	// Historical trading statistics (optimized)
 	if ctx.TradingStats != nil && ctx.TradingStats.TotalTrades > 0 {
-		// Get language from strategy config
 		lang := e.GetLanguage()
-
-		// Win/Loss ratio
-		var winLossRatio float64
-		if ctx.TradingStats.AvgLoss > 0 {
-			winLossRatio = ctx.TradingStats.AvgWin / ctx.TradingStats.AvgLoss
-		}
-
+		
 		if lang == LangChinese {
-			sb.WriteString("## 历史交易统计\n")
-			sb.WriteString(fmt.Sprintf("总交易: %d 笔 | 盈利因子: %.2f | 夏普比率: %.2f | 盈亏比: %.2f\n",
+			sb.WriteString("## 历史统计\n")
+			sb.WriteString(fmt.Sprintf("总交易: %d | 盈利因子: %.2f | 盈亏比: %.2f\n",
 				ctx.TradingStats.TotalTrades,
 				ctx.TradingStats.ProfitFactor,
-				ctx.TradingStats.SharpeRatio,
-				winLossRatio))
-			sb.WriteString(fmt.Sprintf("总盈亏: %+.2f USDT | 平均盈利: +%.2f | 平均亏损: -%.2f | 最大回撤: %.1f%%\n",
-				ctx.TradingStats.TotalPnL,
-				ctx.TradingStats.AvgWin,
-				ctx.TradingStats.AvgLoss,
-				ctx.TradingStats.MaxDrawdownPct))
-
-			// Performance hints based on profit factor, sharpe, and drawdown
-			if ctx.TradingStats.ProfitFactor >= 1.5 && ctx.TradingStats.SharpeRatio >= 1 {
-				sb.WriteString("表现: 良好 - 保持当前策略\n")
-			} else if ctx.TradingStats.ProfitFactor < 1 {
-				sb.WriteString("表现: 需改进 - 提高盈亏比，优化止盈止损\n")
-			} else if ctx.TradingStats.MaxDrawdownPct > 30 {
-				sb.WriteString("表现: 风险偏高 - 减少仓位，控制回撤\n")
-			} else {
-				sb.WriteString("表现: 正常 - 有优化空间\n")
-			}
+				ctx.TradingStats.AvgWin/ctx.TradingStats.AvgLoss))
 		} else {
-			sb.WriteString("## Historical Trading Statistics\n")
-			sb.WriteString(fmt.Sprintf("Total Trades: %d | Profit Factor: %.2f | Sharpe: %.2f | Win/Loss Ratio: %.2f\n",
+			sb.WriteString("## Historical Statistics\n")
+			sb.WriteString(fmt.Sprintf("Total Trades: %d | Profit Factor: %.2f | Win/Loss Ratio: %.2f\n",
 				ctx.TradingStats.TotalTrades,
 				ctx.TradingStats.ProfitFactor,
-				ctx.TradingStats.SharpeRatio,
-				winLossRatio))
-			sb.WriteString(fmt.Sprintf("Total PnL: %+.2f USDT | Avg Win: +%.2f | Avg Loss: -%.2f | Max Drawdown: %.1f%%\n",
-				ctx.TradingStats.TotalPnL,
-				ctx.TradingStats.AvgWin,
-				ctx.TradingStats.AvgLoss,
-				ctx.TradingStats.MaxDrawdownPct))
-
-			// Performance hints based on profit factor, sharpe, and drawdown
-			if ctx.TradingStats.ProfitFactor >= 1.5 && ctx.TradingStats.SharpeRatio >= 1 {
-				sb.WriteString("Performance: GOOD - maintain current strategy\n")
-			} else if ctx.TradingStats.ProfitFactor < 1 {
-				sb.WriteString("Performance: NEEDS IMPROVEMENT - improve win/loss ratio, optimize TP/SL\n")
-			} else if ctx.TradingStats.MaxDrawdownPct > 30 {
-				sb.WriteString("Performance: HIGH RISK - reduce position size, control drawdown\n")
-			} else {
-				sb.WriteString("Performance: NORMAL - room for optimization\n")
-			}
+				ctx.TradingStats.AvgWin/ctx.TradingStats.AvgLoss))
 		}
 		sb.WriteString("\n")
 	}
