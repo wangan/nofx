@@ -506,12 +506,9 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 	// 根据市场状态调整策略参数
 	adjustStrategyForRegime(engine.GetConfig(), regime)
 	
-	// 如果是极度震荡模式且无明显信号，直接返回wait决策，避免AI分析
-	if regime == RegimeExtremeChop || regime == RegimeSniper {
-		logger.Infof("📊 Market in %s, no high-confidence opportunities, returning wait decision directly", getRegimeName(regime))
-		
-		// 根据市场状态调整决策
+	// 根据市场状态调整决策
 	if regime == RegimeExtremeChop {
+		logger.Infof("📊 Market in %s, trying small position trade with tight stop-loss and take-profit", getRegimeName(regime))
 		// 在极度震荡模式下，尝试进行小仓位交易
 		return &FullDecision{
 			SystemPrompt:        "Market regime check",
@@ -534,6 +531,7 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 			AIRequestDurationMs: 0, // 快速决策，无AI响应时间
 		}, nil
 	} else if regime == RegimeSniper {
+		logger.Infof("📊 Market in %s, no high-confidence opportunities, returning wait decision directly", getRegimeName(regime))
 		// 狙击手模式仍保持观望
 		return &FullDecision{
 			SystemPrompt:        "Market regime check",
