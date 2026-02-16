@@ -330,15 +330,15 @@ func (e *StrategyEngine) classifyMarketRegime(ctx *Context) MarketRegime {
 	// 基础分类：连续亏损
 	isSniper := ctx.TradingStats != nil && ctx.TradingStats.ProfitFactor < 0.8
 	
-	// 波动率分析（进一步降低保守性）
+	// 波动率分析（调整为更合理的阈值）
 	volatility := calculateVolatilityAdvanced(ctx.MarketDataMap)
-	isLowVolatility := volatility < 60  // 进一步降低极度震荡模式的波动率阈值
+	isLowVolatility := volatility < 100  // 调整极度震荡模式的波动率阈值
 	isHighVolatility := volatility > 300
 	
-	// 趋势强度分析（进一步降低保守性）
+	// 趋势强度分析（调整为更合理的阈值）
 	trendStrength := calculateTrendStrength(ctx.MarketDataMap)
-	isStrongTrend := trendStrength > 0.15
-	isWeakTrend := trendStrength < 0.08
+	isStrongTrend := trendStrength > 0.2
+	isWeakTrend := trendStrength < 0.1
 	
 	// 市场状态综合判断
 	if isSniper {
@@ -510,7 +510,31 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 	if regime == RegimeExtremeChop || regime == RegimeSniper {
 		logger.Infof("📊 Market in %s, no high-confidence opportunities, returning wait decision directly", getRegimeName(regime))
 		
-		// 快速返回wait决策，避免AI调用
+		// 根据市场状态调整决策
+	if regime == RegimeExtremeChop {
+		// 在极度震荡模式下，尝试进行小仓位交易
+		return &FullDecision{
+			SystemPrompt:        "Market regime check",
+			UserPrompt:          "Quick market regime analysis",
+			CoTTrace: fmt.Sprintf("Market in %s, low volatility and no clear trend. Considering small position trades.", getRegimeName(regime)),
+			Decisions: []Decision{
+				{
+					Symbol:     "BTCUSDT", // 默认币种，可根据实际情况调整
+					Action:     "open_long",
+					Leverage:   3, // 降低杠杆
+					PositionSizeUSD: 10, // 小仓位
+					StopLoss:   0.5, // 严格止损
+					TakeProfit: 0.5, // 快速止盈
+					Confidence: 50, // 降低置信度
+					Reasoning: fmt.Sprintf("Market in %s, trying small position trade with tight stop-loss and take-profit.", getRegimeName(regime)),
+				},
+			},
+			RawResponse:         "Quick decision: small position trade",
+			Timestamp:           time.Now(),
+			AIRequestDurationMs: 0, // 快速决策，无AI响应时间
+		}, nil
+	} else if regime == RegimeSniper {
+		// 狙击手模式仍保持观望
 		return &FullDecision{
 			SystemPrompt:        "Market regime check",
 			UserPrompt:          "Quick market regime analysis",
@@ -527,6 +551,7 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 			Timestamp:           time.Now(),
 			AIRequestDurationMs: 0, // 快速决策，无AI响应时间
 		}, nil
+	}
 	}
 
 	// 3. Build System Prompt using strategy engine
