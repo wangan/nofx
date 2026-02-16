@@ -55,7 +55,7 @@
 | 2026-02-11 | 205.39 | -13.37 | 32.6 | 0.62 | Strategy upgraded (Regime-Adaptive + Sniper Mode). Short BTC holding +5.5%. |
 | 2026-02-14 | 205.36 | -0.64 | 36.5 | 0.74 | Equity recovered slightly to $205.36. **CRITICAL ISSUE**: AI API key not set for DeepSeek model. AI decisions failing since cycle 5535. No open positions. **RISK ALERT**: 3 consecutive losses. |
 | 2026-02-15 | 192.21 | -13.11 | 31.9 | 0.64 | System upgraded with advanced market regime detection. Market in extreme chop mode, returning wait decisions directly. Equity decreased by $13.11. **CRITICAL ISSUE**: Maximum consecutive losses reached 18 trades. Strategy needs urgent optimization. |
-| 2026-02-16 | 192.25 | +0.03 | 31.9 | 0.64 | Market still in extreme chop mode. System continues to return wait decisions. Equity slightly increased by $0.03 (10:00 report). |
+| 2026-02-16 | 192.09 | -0.16 | 31.9 | 0.64 | Market still in extreme chop mode. System continues to return wait decisions. Equity decreased by $0.16 (14:00 report). Closed 1 trade (BTCUSDT SHORT: -$0.17). |
 
 ## 🛠 Optimization Checklist
 - [x] Fix fee calculation in PnL stats.
