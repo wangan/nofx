@@ -24,3 +24,16 @@ skills/
 memory/
 canvas/
 trading_data.db
+*.py
+*.md
+AGENTS.md
+BOOTSTRAP.md
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
+current_strategy_config.json
+decisions.txt
+latest_prompt.txt
+reasoning.txt
