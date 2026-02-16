@@ -251,12 +251,12 @@ func calculateTrendStrength(marketDataMap map[string]*market.Data) float64 {
 			emaSlope := data.CurrentEMA20 - data.LongerTermContext.EMA50
 			rsiPosition := (data.CurrentRSI7 - 50) / 50
 			
-			// 计算MACD信号强度
+			// 计算MACD信号强度（基于当前MACD值的正负）
 			var macdSignal float64
-			if data.MACD != nil && data.MACD.MACD > data.MACD.Signal {
-				macdSignal = 0.5 // 金叉
-			} else if data.MACD != nil && data.MACD.MACD < data.MACD.Signal {
-				macdSignal = -0.5 // 死叉
+			if data.CurrentMACD > 0 {
+				macdSignal = 0.5 // MACD为正，看涨信号
+			} else if data.CurrentMACD < 0 {
+				macdSignal = -0.5 // MACD为负，看跌信号
 			}
 			
 			strength := (emaSlope / maxFloat(abs(data.CurrentEMA20), abs(data.LongerTermContext.EMA50)) * 0.4) + 
@@ -281,7 +281,7 @@ func calculateVolatilityAdvanced(marketDataMap map[string]*market.Data) float64 
 	
 	for _, data := range marketDataMap {
 		if data != nil {
-			// 综合波动率 = ATR * 0.6 + 价格标准差 * 0.4
+			// 综合波动率 = ATR * 0.6 + 价格变化率 * 0.4
 			atr := 0.0
 			if data.IntradaySeries != nil && data.IntradaySeries.ATR14 > 0 {
 				atr = data.IntradaySeries.ATR14
@@ -289,11 +289,8 @@ func calculateVolatilityAdvanced(marketDataMap map[string]*market.Data) float64 
 				atr = data.LongerTermContext.ATR14
 			}
 			
-			// 计算价格变化率
-			var priceChangePct float64
-			if data.LongerTermContext != nil && data.LongerTermContext.Price > 0 {
-				priceChangePct = abs((data.CurrentPrice - data.LongerTermContext.Price) / data.LongerTermContext.Price * 100)
-			}
+			// 计算价格变化率（使用4小时价格变化）
+			priceChangePct := abs(data.PriceChange4h)
 			
 			// 综合波动率计算
 			volatility := atr * 0.6 + priceChangePct * 0.4
@@ -500,57 +497,56 @@ func GetFullDecisionWithStrategy(ctx *Context, mcpClient mcp.AIClient, engine *S
 		}
 	}
 
-	// 2. Quick market regime check to avoid unnecessary AI calls
-	regime := engine.classifyMarketRegime(ctx)
+	// 2. Quick market regime check to avoid unnecessary AI calls (temporarily disabled to test AI decision)
+	// regime := engine.classifyMarketRegime(ctx)
 	
 	// 根据市场状态调整策略参数
-	adjustStrategyForRegime(engine.GetConfig(), regime)
+	// adjustStrategyForRegime(engine.GetConfig(), regime)
 	
 	// 根据市场状态调整决策
-	if regime == RegimeExtremeChop {
-		logger.Infof("📊 Market in %s, trying small position trade with tight stop-loss and take-profit", getRegimeName(regime))
-		// 在极度震荡模式下，尝试进行小仓位交易
-		return &FullDecision{
-			SystemPrompt:        "Market regime check",
-			UserPrompt:          "Quick market regime analysis",
-			CoTTrace: fmt.Sprintf("Market in %s, low volatility and no clear trend. Considering small position trades.", getRegimeName(regime)),
-			Decisions: []Decision{
-				{
-					Symbol:     "BTCUSDT", // 默认币种，可根据实际情况调整
-					Action:     "open_long",
-					Leverage:   3, // 降低杠杆
-					PositionSizeUSD: 10, // 小仓位
-					StopLoss:   0.5, // 严格止损
-					TakeProfit: 0.5, // 快速止盈
-					Confidence: 50, // 降低置信度
-					Reasoning: fmt.Sprintf("Market in %s, trying small position trade with tight stop-loss and take-profit.", getRegimeName(regime)),
-				},
-			},
-			RawResponse:         "Quick decision: small position trade",
-			Timestamp:           time.Now(),
-			AIRequestDurationMs: 0, // 快速决策，无AI响应时间
-		}, nil
-	} else if regime == RegimeSniper {
-		logger.Infof("📊 Market in %s, no high-confidence opportunities, returning wait decision directly", getRegimeName(regime))
-		// 狙击手模式仍保持观望
-		return &FullDecision{
-			SystemPrompt:        "Market regime check",
-			UserPrompt:          "Quick market regime analysis",
-			CoTTrace: fmt.Sprintf("Market in %s, low volatility and no clear trend. No high-confidence trading opportunities.", getRegimeName(regime)),
-			Decisions: []Decision{
-				{
-					Symbol:     "BTCUSDT", // 默认币种，可根据实际情况调整
-					Action:     "wait",
-					Confidence: 90,
-					Reasoning: fmt.Sprintf("Market in %s, no high-confidence opportunities. Strictly follow strategy rules to wait for better conditions.", getRegimeName(regime)),
-				},
-			},
-			RawResponse:         "Quick decision: wait",
-			Timestamp:           time.Now(),
-			AIRequestDurationMs: 0, // 快速决策，无AI响应时间
-		}, nil
-	}
-	}
+	// if regime == RegimeExtremeChop {
+	// 	logger.Infof("📊 Market in %s, trying small position trade with tight stop-loss and take-profit", getRegimeName(regime))
+	// 	// 在极度震荡模式下，尝试进行小仓位交易
+	// 	return &FullDecision{
+	// 		SystemPrompt:        "Market regime check",
+	// 		UserPrompt:          "Quick market regime analysis",
+	// 		CoTTrace: fmt.Sprintf("Market in %s, low volatility and no clear trend. Considering small position trades.", getRegimeName(regime)),
+	// 		Decisions: []Decision{
+	// 			{
+	// 				Symbol:     "BTCUSDT", // 默认币种，可根据实际情况调整
+	// 				Action:     "open_long",
+	// 				Leverage:   3, // 降低杠杆
+	// 				PositionSizeUSD: 10, // 小仓位
+	// 				StopLoss:   0.5, // 严格止损
+	// 				TakeProfit: 0.5, // 快速止盈
+	// 				Confidence: 50, // 降低置信度
+	// 				Reasoning: fmt.Sprintf("Market in %s, trying small position trade with tight stop-loss and take-profit.", getRegimeName(regime)),
+	// 			},
+	// 		},
+	// 		RawResponse:         "Quick decision: small position trade",
+	// 		Timestamp:           time.Now(),
+	// 		AIRequestDurationMs: 0, // 快速决策，无AI响应时间
+	// 	}, nil
+	// } else if regime == RegimeSniper {
+	// 	logger.Infof("📊 Market in %s, no high-confidence opportunities, returning wait decision directly", getRegimeName(regime))
+	// 	// 狙击手模式仍保持观望
+	// 	return &FullDecision{
+	// 		SystemPrompt:        "Market regime check",
+	// 		UserPrompt:          "Quick market regime analysis",
+	// 		CoTTrace: fmt.Sprintf("Market in %s, low volatility and no clear trend. No high-confidence trading opportunities.", getRegimeName(regime)),
+	// 		Decisions: []Decision{
+	// 			{
+	// 				Symbol:     "BTCUSDT", // 默认币种，可根据实际情况调整
+	// 				Action:     "wait",
+	// 				Confidence: 90,
+	// 				Reasoning: fmt.Sprintf("Market in %s, no high-confidence opportunities. Strictly follow strategy rules to wait for better conditions.", getRegimeName(regime)),
+	// 			},
+	// 		},
+	// 		RawResponse:         "Quick decision: wait",
+	// 		Timestamp:           time.Now(),
+	// 		AIRequestDurationMs: 0, // 快速决策，无AI响应时间
+	// 	}, nil
+	// }
 
 	// 3. Build System Prompt using strategy engine
 	riskConfig := engine.GetRiskControlConfig()
