@@ -264,19 +264,19 @@ func GetDefaultStrategyConfig(lang string) StrategyConfig {
 		},
 		Indicators: IndicatorConfig{
 			Klines: KlineConfig{
-				PrimaryTimeframe:     "5m",
+				PrimaryTimeframe:     "15m", // 增加时间框架，降低交易频率
 				PrimaryCount:         30,
 				LongerTimeframe:      "4h",
 				LongerCount:          10,
 				EnableMultiTimeframe: true,
-				SelectedTimeframes:   []string{"5m", "15m", "1h", "4h"},
+				SelectedTimeframes:   []string{"15m", "1h", "4h"},
 			},
 			EnableRawKlines:   true, // Required - raw OHLCV data for AI analysis
-			EnableEMA:         false,
-			EnableMACD:        false,
-			EnableRSI:         false,
-			EnableATR:         false,
-			EnableBOLL:        false,
+			EnableEMA:         true, // 启用EMA指标
+			EnableMACD:        true, // 启用MACD指标
+			EnableRSI:         true, // 启用RSI指标
+			EnableATR:         true, // 启用ATR指标
+			EnableBOLL:        true, // 启用BOLL指标
 			EnableVolume:      true,
 			EnableOI:          true,
 			EnableFundingRate: true,
@@ -304,15 +304,15 @@ func GetDefaultStrategyConfig(lang string) StrategyConfig {
 			PriceRankingLimit:    10,
 		},
 		RiskControl: RiskControlConfig{
-			MaxPositions:                    3,   // Max 3 coins simultaneously (CODE ENFORCED)
-			BTCETHMaxLeverage:               5,   // BTC/ETH exchange leverage (AI guided)
-			AltcoinMaxLeverage:              5,   // Altcoin exchange leverage (AI guided)
-			BTCETHMaxPositionValueRatio:     5.0, // BTC/ETH: max position = 5x equity (CODE ENFORCED)
-			AltcoinMaxPositionValueRatio:    1.0, // Altcoin: max position = 1x equity (CODE ENFORCED)
-			MaxMarginUsage:                  0.9, // Max 90% margin usage (CODE ENFORCED)
-			MinPositionSize:                 12,  // Min 12 USDT per position (CODE ENFORCED)
-			MinRiskRewardRatio:              3.0, // Min 3:1 profit/loss ratio (AI guided)
-			MinConfidence:                   75,  // Min 75% confidence (AI guided)
+			MaxPositions:                    2,   // 降低最大持仓数
+			BTCETHMaxLeverage:               4,   // 降低BTC/ETH杠杆
+			AltcoinMaxLeverage:              4,   // 降低Altcoin杠杆
+			BTCETHMaxPositionValueRatio:     4.0, // 降低BTC/ETH仓位比例
+			AltcoinMaxPositionValueRatio:    0.8, // 降低Altcoin仓位比例
+			MaxMarginUsage:                  0.8, // 降低最大保证金使用率
+			MinPositionSize:                 15,  // 增加最小仓位大小
+			MinRiskRewardRatio:              2.5, // 调整风险回报比
+			MinConfidence:                   80,  // 增加最小置信度
 		},
 	}
 
