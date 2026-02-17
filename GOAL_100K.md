@@ -56,7 +56,7 @@
 | 2026-02-14 | 205.36 | -0.64 | 36.5 | 0.74 | Equity recovered slightly to $205.36. **CRITICAL ISSUE**: AI API key not set for DeepSeek model. AI decisions failing since cycle 5535. No open positions. **RISK ALERT**: 3 consecutive losses. |
 | 2026-02-15 | 192.21 | -13.11 | 31.9 | 0.64 | System upgraded with advanced market regime detection. Market in extreme chop mode, returning wait decisions directly. Equity decreased by $13.11. **CRITICAL ISSUE**: Maximum consecutive losses reached 18 trades. Strategy needs urgent optimization. |
 | 2026-02-16 | 179.53 | -10.98 | 31.9 | 0.64 | Market volatility continues. Equity decreased by $10.98 (23:00 report). Closed trades: BTCUSDT SHORT (-$4.05 sync), BTCUSDT LONG (-$0.33 sync). No open positions. |
-| 2026-02-17 | 170.58 | -3.42 | 33.69 | 0.69 | Hourly report at 08:00. Equity decreased by $3.42. Closed trade: BTCUSDT SHORT (-$2.65 sync). No open positions. |
+| 2026-02-17 | 169.12 | -4.88 | 33.69 | 0.69 | Hourly report at 12:00. Equity decreased by $4.88. No open positions or closed trades in the last hour. |
 
 ## 🛠 Optimization Checklist
 - [x] Fix fee calculation in PnL stats.
