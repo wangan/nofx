@@ -57,6 +57,7 @@
 | 2026-02-15 | 192.21 | -13.11 | 31.9 | 0.64 | System upgraded with advanced market regime detection. Market in extreme chop mode, returning wait decisions directly. Equity decreased by $13.11. **CRITICAL ISSUE**: Maximum consecutive losses reached 18 trades. Strategy needs urgent optimization. |
 | 2026-02-16 | 179.53 | -10.98 | 31.9 | 0.64 | Market volatility continues. Equity decreased by $10.98 (23:00 report). Closed trades: BTCUSDT SHORT (-$4.05 sync), BTCUSDT LONG (-$0.33 sync). No open positions. |
 | 2026-02-17 | 151.36 | -20.34 | 33.16 | 0.69 | Hourly report at 23:04. Equity decreased by $20.34 in 24h. Closed trade: BTCUSDT LONG (-$8.51 sync). |
+| 2026-02-18 | 157.46 | +6.10 | - | - | Hourly report at 00:00. Equity recovered by $6.10. Closed trades: BTCUSDT SHORT (-$1.71 sync), BTCUSDT LONG (-$8.51 sync). No open positions. |
 
 ## 🛠 Optimization Checklist
 - [x] Fix fee calculation in PnL stats.
